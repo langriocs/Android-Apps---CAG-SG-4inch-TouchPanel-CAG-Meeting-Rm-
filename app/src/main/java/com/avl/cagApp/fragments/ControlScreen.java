@@ -134,6 +134,7 @@ public class ControlScreen extends Fragment {
         mShareModel.getControlRoomDevices().observe(getViewLifecycleOwner(), controlRoomDevices -> {
             if (controlRoomDevices != null) {
                 tvRoomName.setText(controlRoomDevices.controlDevice.getRoomName());
+                mViewModel.setSelectedControlDevice(controlRoomDevices.controlDevice);
                 if (controlRoomDevices.roomDevices != null) {
                     controlRoomDevices.roomDevices.forEach(roomDevice -> {
                         if (roomDevice.getDeviceName().equals("Switch")) {

@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.avl.cagApp.model.vo.ControlDevice;
 import com.avl.cagApp.repository.IRoomDevice;
 import com.avl.cagApp.repository.switcher.Switch32x32Repository;
 import com.avl.cagApp.repository.switcher.Switch5x1Output;
@@ -30,6 +31,8 @@ public class ControlScreenViewModel extends ViewModel {
 
     private final IRoomDevice tvRepository;
     private final IRoomDevice switchRepository;
+
+    private Switch5x1Output selectedSource;
 
     public ControlScreenViewModel () {
         tvRepository = new LGTVRepository();
@@ -162,7 +165,8 @@ public class ControlScreenViewModel extends ViewModel {
     public void routeInputSourceToUSB() {
         isUsbCSelected.postValue(true);
         isWirelessSelected.postValue(false);
-        ((Switch5x1Repository) switchRepository).routeInputSourceTo(Switch5x1Output.USB_1);
+
+        ((Switch5x1Repository) switchRepository).routeInputSourceTo(selectedSource);
     }
 
     public void routeInputSourceToWireless() {
@@ -180,4 +184,11 @@ public class ControlScreenViewModel extends ViewModel {
         switchRepository.cleanup();
     }
 
+    public void setSelectedControlDevice(ControlDevice controlDevice) {
+        if (controlDevice.getIpAdd().equals("192.168.1.60")) { // if Room is PMA Holding
+            selectedSource = Switch5x1Output.HDMI_3;
+        } else {
+            selectedSource = Switch5x1Output.USB_1;
+        }
+    }
 }
