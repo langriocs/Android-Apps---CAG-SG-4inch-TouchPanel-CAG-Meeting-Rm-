@@ -1,7 +1,6 @@
 package com.avl.cagApp.fragments;
 
 import android.graphics.PorterDuff;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
@@ -36,6 +35,24 @@ public class ControlScreen extends Fragment {
     boolean isSwitcherConnected = false;
     TVPowerState powerState = TVPowerState.UNKNOWN;
 
+    private TextView tvRoomName;
+    private ConstraintLayout btnSourceUsbC;
+    private ConstraintLayout btnSourceWireless;
+    private ConstraintLayout btnSourceMS;
+    private MaterialButton btnMute;
+    private MaterialButton btnPower;
+    private ImageView switchLedIcon;
+    private ImageView tvLedIcon;
+    private TextView txtSystemOnline;
+    private TextView tvLedTVDesc;
+    private SeekBar seekBarVolume;
+    private ImageView imgVolDown;
+    private ImageView imgVolUp;
+
+    private View layoutWarmup;
+    private TextView txtWarmupCountdown;
+
+
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -54,21 +71,32 @@ public class ControlScreen extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        TextView tvRoomName = view.findViewById(R.id.txtRoomName);
-        ConstraintLayout btnSourceUsbC = view.findViewById(R.id.btnSourceUsbC);
-        ConstraintLayout btnSourceWireless = view.findViewById(R.id.btnSourceWireless);
-        MaterialButton btnMute = view.findViewById(R.id.btnMute);
-        MaterialButton btnPower = view.findViewById(R.id.btnPower);
-        TextView txtSystemOnline = view.findViewById(R.id.txtSystemOnline);
-        ImageView switchLedIcon = view.findViewById(R.id.imgSystemOnlineLed);
-        ImageView tvLedIcon = view.findViewById(R.id.imgDisplayConnectedLed);
-        TextView tvLedTVDesc = view.findViewById(R.id.txtDisplayConnected);
-        ImageView imgDisplayIndicator = view.findViewById(R.id.imgStatusIndicator);
-        TextView txtDisplayStatus = view.findViewById(R.id.txtDisplayStatus);
-        SeekBar seekBarVolume = view.findViewById(R.id.seekBarVolume);
-        ImageView imgVolDown = view.findViewById(R.id.imgVolDown);
-        ImageView imgVolUp = view.findViewById(R.id.imgVolUp);
+        tvRoomName = view.findViewById(R.id.txtRoomName);
+        btnPower = view.findViewById(R.id.btnPower);
+        btnPower.setOnClickListener(v -> {
+            mViewModel.turnOffTV();
+            performShutdown();
+            Navigation.findNavController(v).navigate(R.id.action_controlScreen_to_splashScreen);
+        });
 
+        // Warmup UI components
+        layoutWarmup = view.findViewById(R.id.layoutWarmup);
+        txtWarmupCountdown = view.findViewById(R.id.txtWarmupCountdown);
+
+        setupSource(view);
+        setupAudioControl(view);
+        setupIndicator(view);
+        fetchControlDevicesData();
+        observeViewModel();
+
+
+
+    }
+
+    private void setupSource(View view) {
+        btnSourceUsbC = view.findViewById(R.id.btnSourceUsbC);
+        btnSourceWireless = view.findViewById(R.id.btnSourceWireless);
+        btnSourceMS = view.findViewById(R.id.btnSourceMS);
 
         btnSourceUsbC.setOnClickListener(v -> {
             mViewModel.routeInputSourceToUSB();
@@ -78,17 +106,20 @@ public class ControlScreen extends Fragment {
             mViewModel.routeInputSourceToWireless();
         } );
 
-        btnPower.setOnClickListener(v -> {
-
-            mViewModel.turnOffTV();
-            performShutdown();
-            Navigation.findNavController(v).navigate(R.id.action_controlScreen_to_splashScreen);
-
+        btnSourceMS.setOnClickListener(v -> {
+            mViewModel.routeInputSourceToMS();
         });
+    }
+
+    private void setupAudioControl(View view) {
+        seekBarVolume = view.findViewById(R.id.seekBarVolume);
+        imgVolDown = view.findViewById(R.id.imgVolDown);
+        imgVolUp = view.findViewById(R.id.imgVolUp);
+        btnMute = view.findViewById(R.id.btnMute);
 
         btnMute.setOnClickListener(v -> {
-            Boolean current = mViewModel.getTVMuted().getValue();
-            mViewModel.changeMute(current);
+            Boolean current = mViewModel.getDSPMuted().getValue();
+            mViewModel.changeMute(current == null || !current);
         });
 
         seekBarVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -126,11 +157,16 @@ public class ControlScreen extends Fragment {
                 mViewModel.changeVolume(volNum);
             }
         });
+    }
 
-        // Warmup UI components
-        View layoutWarmup = view.findViewById(R.id.layoutWarmup);
-        TextView txtWarmupCountdown = view.findViewById(R.id.txtWarmupCountdown);
+    private void setupIndicator(View view) {
+        txtSystemOnline = view.findViewById(R.id.txtSystemOnline);
+        switchLedIcon = view.findViewById(R.id.imgSystemOnlineLed);
+        tvLedIcon = view.findViewById(R.id.imgDisplayConnectedLed);
+        tvLedTVDesc = view.findViewById(R.id.txtDisplayConnected);
+    }
 
+    private void fetchControlDevicesData() {
         mShareModel.getControlRoomDevices().observe(getViewLifecycleOwner(), controlRoomDevices -> {
             if (controlRoomDevices != null) {
                 tvRoomName.setText(controlRoomDevices.controlDevice.getRoomName());
@@ -141,12 +177,18 @@ public class ControlScreen extends Fragment {
                             mViewModel.connectSwitcher(roomDevice.getDeviceIpAddress(), roomDevice.getDevicePort());
                         } else if (roomDevice.getDeviceName().equals("TV")) {
                             mViewModel.connectTV(roomDevice.getDeviceIpAddress(), roomDevice.getDevicePort());
+                        } else if (roomDevice.getDeviceName().equals("DSP")) {
+                            mViewModel.connectDSP(roomDevice.getDeviceIpAddress(), roomDevice.getDevicePort());
                         }
                     });
                 }
             }
         });
+    }
 
+
+
+    private void observeViewModel() {
         mViewModel.getTvPowerState().observe(getViewLifecycleOwner(), state -> {
 
 
@@ -160,14 +202,20 @@ public class ControlScreen extends Fragment {
             btnSourceWireless.setBackgroundResource(isSelected ? R.drawable.bg_rounded_card_selected : R.drawable.bg_rounded_card);
         });
 
-        mViewModel.getTVMuted().observe(getViewLifecycleOwner(), isMuted -> {
+        mViewModel.getIsMSSelected().observe(getViewLifecycleOwner(), isSelected -> {
+            btnSourceMS.setBackgroundResource(isSelected ? R.drawable.bg_rounded_card_selected : R.drawable.bg_rounded_card);
+        });
+
+
+        mViewModel.getDSPMuted().observe(getViewLifecycleOwner(), isMuted -> {
             btnMute.setBackgroundResource(isMuted ? R.drawable.bg_rounded_card_selected : R.drawable.bg_rounded_card);
             btnMute.setIconResource(isMuted ? R.drawable.ic_volume_down : R.drawable.ic_volume_mute );
         });
 
-        mViewModel.getTVVolume().observe(getViewLifecycleOwner(), volume -> {
+        mViewModel.getDSPVolume().observe(getViewLifecycleOwner(), volume -> {
             if (volume != null) {
                 seekBarVolume.setProgress(volume);
+                volNum = volume;
             }
         });
 
@@ -203,14 +251,6 @@ public class ControlScreen extends Fragment {
         });
     }
 
-    private void showAlert() {
-        CustomAlertDialog alertScreenDialog = new CustomAlertDialog();
-        alertScreenDialog.setTitle("Changi Airport Group");
-        alertScreenDialog.setMessage("Device IP Address not found! Please contact the admin.");
-        alertScreenDialog.show(getParentFragmentManager(), "alert dialog");
-    }
-
-
     private void startWarmup(View layoutWarmup, TextView txtWarmupCountdown) {
         layoutWarmup.setVisibility(View.VISIBLE);
 
@@ -243,26 +283,6 @@ public class ControlScreen extends Fragment {
         }
 
         ledIcon.setColorFilter(color, PorterDuff.Mode.SRC_IN);
-    }
-
-    private void setLEDDisplayStatus(ImageView ledIcon, TextView txtDisplayStatus, TVPowerState status) {
-        Drawable color = null;
-        String desc = "";
-        if(status == TVPowerState.ON) {
-            color = ContextCompat.getDrawable(requireContext(), R.drawable.ic_led);
-            desc = "Display is ON";
-        }
-        if (status == TVPowerState.OFF) {
-            color = ContextCompat.getDrawable(requireContext(), R.drawable.ic_led_red);
-            desc = "Display is OFF";
-        }
-
-        if (color == null) {
-            return;
-        }
-
-        ledIcon.setImageDrawable(color);
-        txtDisplayStatus.setText(desc);
     }
 
     private void performShutdown() {
